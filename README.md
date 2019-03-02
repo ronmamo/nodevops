@@ -2,9 +2,9 @@
 
 **Encapsulate all of your projects' CI/CD needs into a portable ad-hoc Docker agent**
 
-Execute build/push/deploy and other CI/CD commands using simple one-liners
+Execute build/push/deploy and other CI/CD commands using simple one-liners.
 
-Works for any build tool and any deployment tool, includes all required environment variables and CLI tools
+Can works for any build tool and any deployment tool. Includes all relevant environment variables and CLI tools.
 
 - Commands: build, push, deploy, cicd, pipeline, promote, ...
 - CLIs: hub (github), kubectl, helm, slack, maven, go, dotnet, jira, aws, azure, jfrog, ...
@@ -13,7 +13,7 @@ Works for any build tool and any deployment tool, includes all required environm
 _WIP / POC / Looking for design partners_
 
 ### Init
-Generate `nodevops` script:
+Generate `nodevops` script and Docker agent:
 ```bash
 docker run -it -v $PWD:/workspace nodevops/agent init
 
