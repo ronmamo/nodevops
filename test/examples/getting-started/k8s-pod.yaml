@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: getting-started-test-3
+spec:
+  containers:
+  - name: getting-started
+    image: getting-started-test-3:latest
+    imagePullPolicy: IfNotPresent    

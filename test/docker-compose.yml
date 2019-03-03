@@ -1,0 +1,40 @@
+version: '2.1'
+services:
+
+  artifactory:
+    image: docker.bintray.io/jfrog/artifactory-oss:6.4.1
+    ports:
+      - 8081:8081
+
+  nexus:
+    image: sonatype/nexus
+    ports:
+      - 8082:8082
+
+  # jenkins:
+  #   image: jenkins/jenkins:alpine
+  #   ports:
+  #     - 8080:8080
+      
+  elasticsearch:
+    image: elasticsearch:alpine
+    ports:
+      - 9200:9200
+      - 9300:9300
+
+  registry:
+    image: registry:2.5.1
+    ports: 
+      - 5000:5000
+    environment: 
+      FORCE_SSL: 'false'
+
+  gitea:
+    image: gitea/gitea
+    ports:
+      - 3000:3000
+
+  mattermost:
+    image: mattermost/platform
+    ports:
+      - 8065:80
