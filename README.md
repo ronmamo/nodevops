@@ -12,6 +12,22 @@ Can works for any build tool and any deployment tool. Includes all relevant envi
 
 _WIP / POC / Looking for design partners_
 
+----
+
+## How it works
+
+Given your project's sources, the first command **init** creates both the ad-hoc `nodevops` scripts and Docker agents. 
+The project's sources and your environment are inspected, and a customized Docker agent is built accordingly.
+
+The Docker agent is based on alpine and containing all the relevant tools and environment variables, small in size and portable to both developers' machines or CI servers.
+For example, if the detected features are Java/Maven, Github, and Kubernetes - the ad-hoc Docker agent is going to contain the relevant CLIs (maven, kubectl, hub and others) together with the environment variables needed to execute commands.
+
+From this point, you can use the `nodevops` script to execute any CI/CD commands for this specific project, such as **build**, **push**, **deploy**. The **cicd** command creates github webhook, listens to pull requests and comments (gitops), and executes the **pipeline** command when required.
+
+It is very easy to extend the project with for any build/deploy tool - by adding a Dockerfile snippet to install the relevant CLI tool (for the customized Docker agent), and few Shell script lines (for commands).
+
+----
+
 ### Init
 Generate `nodevops` script and Docker agent:
 ```bash
@@ -43,4 +59,3 @@ Execute CI/CD pipelines using github webhook, [adnanh-webhook](https://github.co
 ```
 
 ![nodevops-cicd](https://user-images.githubusercontent.com/2588829/53676700-ad52d480-3cd8-11e9-9b9b-758787665032.gif)
-
