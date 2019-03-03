@@ -1,0 +1,19 @@
+#!/bin/sh
+set -e
+
+RELEASE=$1
+
+for BUILD in $BUILD_TYPE; do
+	case $BUILD in
+		zip)	cd /workspace; zip $RELEASE * ;;
+		docker) [ -z $RELEASE ] && docker build . || docker build --build-arg RELEASE=$RELEASE -t $RELEASE . ;;
+		go)     [ -z $RELEASE ] && go build || go build -o $RELEASE ;;
+		maven)	mvn package ;;
+		java)	mvn package ;;
+		make)	make $@ ;;
+		helm)   helm get $ARTIFACT; helm dep build $ARTIFACT ;;
+		sbt)    sbt package ;;
+		dotnet) dotnet build $ARTIFACT ;;
+		*) echo "unknown BUILD_TYPE"; exit 1 ;;
+	esac
+done

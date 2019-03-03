@@ -1,0 +1,12 @@
+#!/bin/sh
+
+[ $# -lt 1 ] && echo "usage: $0 <release> [path]" && exit 1
+
+RELEASE=$1 
+ARTIFACT_PATH=$2
+
+case $PUSH_TYPE in
+	docker)		 docker tag $RELEASE $DOCKER_REGISTRY/$RELEASE; docker push $DOCKER_REGISTRY/$RELEASE ;;
+	artifactory) jfrog rt upload $RELEASE $ARTIFACT_PATH ;;
+	*) echo "unknown PUSH_TYPE"; exit 1 ;;
+esac

@@ -1,0 +1,151 @@
+#!/bin/bash
+set -e
+
+ECHO() { printf "\e[1;32m$1 \e[0m"; shift && echo $@; }
+READ() { read -p "$1" -r PROMPT; }
+UNIQ() { echo $1 | tr ' ' '\n' | awk '!u[$0]++' | tr '\n' ' ' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'; }
+EXIST() { for FEATURE in $2; do if [ -e /nodevops/builders/$1/$FEATURE.Dockerfile ]; then echo "$FEATURE"; fi; done; }
+
+if [ -z "$(ls /workspace)" ]; then
+	echo "error: /workspace is not mounted or empty"
+	ECHO "execute:" "docker run -it --rm -v \$PWD:/workspace nodevops/agent init"
+	echo ""
+	exit 1
+fi
+
+# detect env
+ENV_VARS="$ENV_VARS -e BUILD_TYPE -e PUSH_TYPE -e DEPLOY_TYPE -e OPS_TYPE"
+ENV_VARS="$ENV_VARS -e DOCKER_REGISTRY -e DOCKER_TLS_VERIFY -e DOCKER_HOST -e DOCKER_CERT_PATH -e DOCKER_API_VERSION"
+ENV_VARS="$ENV_VARS -e USE_CACHES -e NO_PROMPT -e NO_DETECT"
+ENV_VARS="$ENV_VARS -e GITHUB_USER -e GITHUB_TOKEN -e GITHUB_URL -e GITHUB_API"
+ENV_VARS="$ENV_VARS -e WEBHOOK_SECRET"
+
+if [ $# -lt 1 ] || [ ! -e /var/run/docker.sock ]; then
+	cat > /workspace/.generated <<EOF 
+#!/bin/sh
+if [ ! -z "\$DOCKER_CERT_PATH" ]; then
+	VOLUMES="\$VOLUMES -v \$DOCKER_CERT_PATH:\$DOCKER_CERT_PATH"
+	[ -e \$HOME/.kube ] && VOLUMES="\$VOLUMES -v \$HOME/.kube:/root/.kube"
+fi
+docker run -it --rm \
+	-v \$PWD:/workspace -v /var/run/docker.sock:/var/run/docker.sock \$VOLUMES \
+	$ENV_VARS \
+	nodevops/agent \$@
+EOF
+	mv /workspace/.generated /workspace/nodevops
+	chmod +x /workspace/nodevops
+	echo "generated: ./nodevops"
+	ECHO "execute:" "./nodevops init <name> [features]"
+	echo ""
+	exit 0
+fi
+
+NAME=$1
+shift
+FEATURES="$@"
+
+# detect build type
+if [ -z "$BUILD_TYPE" ]; then
+	# detect language
+	if type "github-linguist" > /dev/null && [ -z "$NO_DETECT" ]; then
+		ECHO "detecting language..."
+		if [ ! -e .git ]; then
+			# workaround for linguist
+			git config --global user.name "nodevops" && git config --global user.email "nodevops@nodevops" > /dev/null
+			GIT_TMP=.git
+			git init > /dev/null && git add --all && git commit -m "tmp" > /dev/null
+		fi
+		LINGUIST=$(github-linguist) || true
+		[ ! -z $GIT_TMP ] && rm -rf .git > /dev/null
+		
+		echo "$LINGUIST"
+		LANGUAGE=$(echo "$LINGUIST" | awk '{print tolower($2)}') || true
+		LANGUAGE="${LANGUAGE/dockerfile/docker}"
+		if [ ! -z "$LANGUAGE" ]; then
+			echo detected: $LANGUAGE
+		fi
+	fi
+	BUILD_TYPE="$FEATURES $LANGUAGE"
+fi
+BUILD_TYPE=$(UNIQ "$BUILD_TYPE")
+BUILD_TYPE=$(EXIST builder "$BUILD_TYPE")
+[[ $BUILD_TYPE == *docker* ]] && BUILD_TYPE="$(echo $BUILD_TYPE | sed 's/docker//g') docker" # todo order snippets FROM first
+BUILD_TYPE=$(UNIQ "$BUILD_TYPE")
+if [ -z "$NO_PROMPT" ]; then
+	READ "export BUILD_TYPE=\"$BUILD_TYPE\"? "
+	[ ! -z "$PROMPT" ] && BUILD_TYPE="$PROMPT"
+fi
+
+# detect deploy type
+if [ -z "$DEPLOY_TYPE" ]; then
+	case "$FEATURES" in
+		*kubernetes*) 
+			[ ! -e /root/.kube ] && echo "error: /root/.kube folder is missing" && exit 1
+			[ -z "$DOCKER_CERT_PATH" ] && echo "error: DOCKER_CERT_PATH is not defined" && exit 1
+			DEPLOY_TYPE="kubernetes"
+			;;
+	esac
+fi
+
+# detect features
+FEATURES="docker $FEATURES"
+if [[ "$(git config --get remote.origin.url)" =~ .*github\.com.* ]]; then 
+	FEATURES="$FEATURES github"
+	# if [ -z "$NO_PROMPT" ]; then
+		# READ "GITHUB_TOKEN=\"$GITHUB_TOKEN\"? "
+		# [ ! -z "$PROMPT" ] && GITHUB_TOKEN="$PROMPT"
+	# fi
+fi
+FEATURES=$(UNIQ "$FEATURES")
+
+# generate nodevops
+IMAGE=nodevops/agent
+if [ ! -z $NAME ]; then
+	IMAGE=nodevops/$NAME-agent
+	BUILDER=nodevops/$NAME-builder
+fi
+
+cat > /workspace/.generated <<EOF 
+#!/bin/sh
+set -e
+
+# project variables
+$([ ! -e $NAME ] && echo "export PROJECT_NAME=$NAME")
+export BUILD_TYPE="$BUILD_TYPE"
+export PUSH_TYPE=$PUSH_TYPE
+export DEPLOY_TYPE=$DEPLOY_TYPE
+$([ ! -e $OPS_TYPE ] && echo "export OPS_TYPE=$OPS_TYPE")
+$([ ! -e $GITHUB_URL ] && echo "export GITHUB_URL=$GITHUB_URL")
+$([ ! -e $GITHUB_API ] && echo "export GITHUB_API=$GITHUB_API")
+$([ ! -e $GITHUB_USER ] && echo "export GITHUB_USER=$GITHUB_USER")
+$([ ! -e $DOCKER_REGISTRY ] && echo "export DOCKER_REGISTRY=$DOCKER_REGISTRY")
+
+# execute variables
+IMAGE=$IMAGE && [ "\$1" = "build" ] && IMAGE=$BUILDER
+VOLUMES=\${VOLUMES:-"-v \$PWD:/workspace -v /var/run/docker.sock:/var/run/docker.sock"}
+test -t 1 && USE_TTY="-t" 
+if [ "\$1" = "build" ] && [ ! -z \$USE_CACHES ]; then
+	 [ -e \$HOME/.m2 ] && VOLUMES="\$VOLUMES -v \$HOME/.m2:/root/.m2"
+fi
+[ ! -z "\$DOCKER_CERT_PATH" ] && VOLUMES="\$VOLUMES -v \$DOCKER_CERT_PATH:\$DOCKER_CERT_PATH"
+CID=\$(head -1 /proc/self/cgroup 2> /dev/null | cut -d/ -f3)
+[ ! -z \$CID ] && VOLUMES="--volumes-from=\$CID"
+
+# run docker agent
+docker run -i \$USE_TTY --rm \\
+	\$VOLUMES \\
+	$ENV_VARS \\
+	\$IMAGE "\$@"
+EOF
+cat /workspace/.generated | sed '/^$/N;/^\n$/D' > /workspace/nodevops1
+mv /workspace/nodevops1 /workspace/nodevops
+chmod +x /workspace/nodevops
+rm /workspace/.generated
+
+# build agent
+IMAGE=$IMAGE /nodevops/builders/build.sh agent $FEATURES
+
+[ ! -z $BUILDER ] && IMAGE=$BUILDER /nodevops/builders/build.sh builder "$BUILD_TYPE"
+ 
+ECHO "execute:" "./nodevops <command> [args]"
+echo ""

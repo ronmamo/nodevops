@@ -1,0 +1,188 @@
+#!/bin/bash
+set -e
+
+[ $# -lt 1 ] && echo "usage: $0 <artifact> [environment]" && exit 1
+
+. $ENV | true
+
+SLACK_CHANNEL=
+POLL_TIME=10
+
+build_push_deploy() {
+	CID=$(head -1 /proc/self/cgroup|cut -d/ -f3)
+	export VOLUMES="--volumes-from=$CID" 
+	RELEASE="$(git rev-parse --abbrev-ref HEAD | sed 's,/,_,g')-$(git log -n 1 --pretty=format:'%h')" || true
+	/workspace/nodevops ${PIPELINE:-pipeline} $RELEASE
+}
+
+ECHO() { printf "\e[1;32m$1 \e[0m"; shift && echo $@; }
+
+GITHUB() { 
+	curl -sL -X ${3:-POST} ${GITHUB_API:-https://api.github.com}/$1 \
+		-H "Authorization: token $GITHUB_TOKEN" -H "accept: application/json" -H "Content-Type: application/json" \
+		-d "$2" 
+}
+
+git_change() {
+	[[ ! "$(git status | head -n 2)" =~ "up-to-date" ]]
+}
+
+docker_is_running() {
+	docker ps -q -f name=$1
+}
+
+github_repopath() {
+	[[ $(git config --get remote.origin.url) =~ .*/(.*/.*)\.git ]] && echo ${BASH_REMATCH[1]}
+}
+
+webhook_start() {
+	if [ -z "$(docker_is_running nodevops-webhook)" ]; then
+		CID=$(head -1 /proc/self/cgroup|cut -d/ -f3)
+		docker run -d --rm --name nodevops-webhook --volumes-from=$CID -p 3001:9000 nodevops/webhook -hooks=/etc/webhook/hooks.json -hotreload -verbose
+	fi
+	ECHO "nodevops-webhook running" "@ localhost:3001"
+}
+
+ngrok_start() {
+	# todo if ngrok conf file then start with config, else 
+	if [ -z "$(docker_is_running nodevops-ngrok)" ]; then
+		docker run -d --rm --name nodevops-ngrok -p 4040:4040 wernight/ngrok ngrok "$@"
+	fi
+	NGROK_URL="$(ngrok_get_url)"
+	[ -z $NGROK_URL ] && echo "error: could not start nodevops-ngrok" && exit
+	ECHO "nodevops-ngrok running" "@ $NGROK_URL"
+}
+
+ngrok_get_url() {
+	for i in $(seq 1 15); do 
+		local NGROK_URL="$(curl -s -f -m 1 host.docker.internal:4040/api/tunnels | jq -r ".tunnels[0].public_url" | sed 's@http.*//@https://@g')"
+		if [ ! -z "$NGROK_URL" ] && [ "$NGROK_URL" != "null" ]; then break; fi
+		sleep 1
+	done
+	echo $NGROK_URL
+}
+
+github_get_webhook() {
+	GITHUB "repos/$1/hooks" "" GET | jq -c ".[] | select(.config.url | contains (\"$2\"))"
+}
+
+github_create_webhook() {
+	if [ ! -z $GITHUB_TOKEN ]; then
+		GITHUB_REPOPATH="$(github_repopath)"
+		GITHUB_WEBHOOK="$(github_get_webhook $GITHUB_REPOPATH $1)"
+		if [ -z $GITHUB_WEBHOOK ]; then
+			GITHUB_WEBHOOK=$(GITHUB repos/$GITHUB_REPOPATH/hooks "{\"active\": true, \"events\":[\"create\",\"delete\",\"fork\",\"push\",\"issues\",\"issue_comment\",\"pull_request\",\"repository\",\"release\"], \"config\": { \"url\": \"$1\", \"content_type\": \"json\", \"secret\": \"$WEBHOOK_SECRET\"}}")
+		fi
+	fi
+	[ -z "$GITHUB_WEBHOOK" ] && echo "error: missing GITHUB_TOKEN or GITHUB_WEBHOOK" && exit
+	ECHO "github webhook" "@ $(echo $GITHUB_WEBHOOK | jq -r '.url')"
+}
+
+github_webhook_delete() {
+	if [ ! -z $GITHUB_TOKEN ]; then
+		GITHUB_REPOPATH="$(github_repopath)"
+		WEBHOOK_ID="$(github_get_webhook $GITHUB_REPOPATH $1 | jq -r '.id')"
+		for ID in $WEBHOOK_ID; do GITHUB "repos/$GITHUB_REPOPATH/hooks/$ID" "" DELETE; done
+	fi
+}
+
+case $1 in
+	start) 
+		ARTIFACT=$1 && shift
+		ENVIRONMENT=$1
+		WEBHOOK_SECRET=${WEBHOOK_SECRET:-blablabla}
+		case $OPS_TYPE in
+			fs)
+				ECHO "waiting for fs changes..."
+				while [ true ]; do 
+					inotifywait -r .
+					build_push_deploy
+				done 
+				;;
+			git)
+				ECHO "waiting for git updates..."
+				while [ true ]; do
+					while [ ! git_change ]; do git remote update; sleep ${POLL_TIME:-10}; done
+					git pull
+					build_push_deploy
+				done
+				;;
+			gitea) 
+				webhook_start webhooks-gitea.json
+				GITEA_URL=host.docker.internal:3000
+				github_create_webhook $GITEA_URL
+				;;
+			github) 
+				webhook_start webhooks-github.json
+				ngrok_start http host.docker.internal:3001
+ 				github_create_webhook $(ngrok_get_url)/hooks/webhook
+				echo "execute: ./nodevops cicd [start|logs|hook|stop]"
+				;; 
+			*) echo "unknown OPS_TYPE"; exit 1 ;;
+		esac
+		;;
+	hook)
+		EVENT=$2
+		PAYLOAD=$3
+		REPO=$(echo $PAYLOAD | jq -r .repository.full_name || echo "")
+		ECHO hook $EVENT
+		case $EVENT in
+			ping) 
+				echo "ping event $REPO" 
+				;;
+			create) 
+				REF=$(echo $PAYLOAD | jq -r .ref)
+				echo "create branch event $REPO $REF" 
+				;;
+			push) 
+				COMMIT_MESSAGE=$(echo $PAYLOAD | jq -r .head_commit.message)
+				COMMIT_USER=$(echo $PAYLOAD | jq -r .head_commit.committer.name)
+				COMMIT_ID=$(echo $PAYLOAD | jq -r .head_commit.id)
+				echo "push event $REPO $COMMIT_USER $COMMIT_MESSAGE $COMMIT_ID" 
+				;;
+			pull_request)
+				ACTION=$(echo $PAYLOAD | jq -r .action)
+				MERGED=$(echo $PAYLOAD | jq -r .pull_request.merged)
+				case "$ACTION $MERGED" in
+					opened*) 
+						echo "pull request opened event $REPO"
+						build_push_deploy
+						;;
+					"closed true") 
+						echo "pull request merged event $REPO"
+						build_push_deploy
+						;;
+					*) echo "unhandled pull request event: $ACTION" ;;
+				esac
+				;;
+			issue_comment)
+				ACTION=$(echo $PAYLOAD | jq -r .action)
+				COMMENT=$(echo $PAYLOAD | jq -r .comment.body)
+				echo "issue comment event $REPO $ACTION $COMMENT"
+				case $COMMENT in
+					/pipeline) build_push_deploy ;;
+					/deploy) build_push_deploy ;;
+					*) echo "unhandled issue comment event: $COMMENT" ;;
+						
+				esac
+				echo "issue comment event $REPO $ACTION"
+				;;
+			*) echo "unhandled event: $ACTION [$@]" ;;
+		esac
+		;;
+	log|logs) 
+		docker logs -f nodevops-webhook 2>&1 | grep -v "executing /workspace/nodevops"
+		;;
+	stop)
+		case $OPS_TYPE in
+			gitea)
+				docker kill nodevops-webhook 2> /dev/null || true
+				;;
+			github)
+				docker kill nodevops-webhook nodevops-ngrok 2> /dev/null || true
+				github_webhook_delete "$(ngrok_get_url)"
+				;;
+			*) echo "unhandled stop: $OPS_TYPE"; ;;
+		esac
+		;;
+esac

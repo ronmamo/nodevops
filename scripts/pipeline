@@ -1,0 +1,16 @@
+#!/bin/bash
+set -e
+
+[ $# -ge 1 ] && RELEASE=$1
+[ -z $RELEASE ] && RELEASE="$(git rev-parse --abbrev-ref HEAD | sed 's,/,_,g')-$(git log -n 1 --pretty=format:'%h')" || true
+[ -z $RELEASE ] && RELEASE=$(date +%Y%m%d_%H%M%S)
+
+#ENVIRONMENT=
+CID=$(head -1 /proc/self/cgroup|cut -d/ -f3)
+export VOLUMES="--volumes-from=$CID"
+
+./nodevops build $RELEASE
+push $RELEASE 
+# slack chat send 'pushed $RELEASE' $SLACK_CHANNEL
+deploy $RELEASE $ENVIRONMENT
+# slack chat send 'deployed $RELEASE to $ENVIRONMENT' $SLACK_CHANNEL

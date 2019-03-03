@@ -1,0 +1,13 @@
+#!/bin/sh
+
+[ $# -lt 1 ] && echo "usage: $0 [PUSH_TYPE] <release> <artifact path>" && exit 1
+
+[ -e "$PUSH_TYPE" ] && { PUSH_TYPE=$1; shift; }
+RELEASE=$1
+ARTIFACT_PATH=$2
+
+case $PUSH_TYPE in
+  docker)       docker pull $ARTIFACT_PATH/$RELEASE ;;
+  artifactory)  jfrog rt download --explode $ARTIFACT_PATH/$RELEASE ;;
+  *) echo "unknown PUSH_TYPE"; exit 1 ;;
+esac

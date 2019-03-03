@@ -1,0 +1,20 @@
+#!/bin/sh
+set -e
+
+[ $# -lt 1 ] && echo "usage: $0 [DEPLOY_TYPE] <artifact> [environment]" && exit 1
+
+RELEASE=$1 && shift
+ENVIRONMENT=$1
+
+case $DEPLOY_TYPE in
+	docker)	docker run --rm -t -d $RELEASE $@ ;;
+	kubernetes) kubectl apply -f ${KUBE_CONF_FOLDER:-.} ;;
+	helm)
+ 		helm get $RELEASE
+		helm dep build $RELEASE
+		helm install --name $RELEASE
+		helm upgrade $RELEASE --recreate-pods
+		;;
+    skaffold) skaffold deploy $RELEASE ;;
+    *) echo "unknown DEPLOY_TYPE"; exit 1 ;;
+esac
