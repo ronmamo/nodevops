@@ -20,7 +20,7 @@ docker run -it -v $PWD:/workspace nodevops/agent init
 ./nodevops init <project-name> [features]
 ```
 
-![nodevops-init](https://user-images.githubusercontent.com/2588829/53676305-e7b97300-3cd2-11e9-80a9-1837be7a8b65.gif)
+![nodevops-example-go-init](https://user-images.githubusercontent.com/2588829/53689563-830e1f00-3d8b-11e9-9420-46ff8947124f.gif)
 
 ### Build-Push-Deploy
 Execute `nodevops` build-push-deploy and other commands:
@@ -30,7 +30,7 @@ Execute `nodevops` build-push-deploy and other commands:
 ./nodevops deploy <release>
 ```
 
-![nodevops-build-push-deploy](https://user-images.githubusercontent.com/2588829/53676340-62828e00-3cd3-11e9-9aad-b9e79f5eae05.gif)
+![nodevops-example-java-build-push-deploy](https://user-images.githubusercontent.com/2588829/53689687-bc478e80-3d8d-11e9-94d6-29d066304826.gif)
 
 ### CI/CD
 Execute CI/CD pipelines using github webhook, [adnanh-webhook](https://github.com/adnanh/webhook) and ngrok:
