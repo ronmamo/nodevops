@@ -1,10 +1,12 @@
 # NoDevops
 
-**Encapsulate all of your projects' CI/CD needs into a portable ad-hoc Docker agent**
+_A different take on Continious integration and deployment_
+
+**Encapsulate all of your projects' CI/CD needs into a portable ad-hoc Docker agent.**
 
 Execute build/push/deploy and other CI/CD commands using simple one-liners.
 
-Can works for any build tool and any deployment tool. Includes all relevant environment variables and CLI tools.
+Can work for any build tool and any deployment tool. Includes all relevant environment variables and CLI tools.
 
 - Commands: build, push, deploy, cicd, pipeline, promote, ...
 - CLIs: hub (github), kubectl, helm, slack, maven, go, dotnet, jira, aws, azure, jfrog, ...
@@ -17,14 +19,16 @@ _WIP / POC / Looking for design partners_
 ## How it works
 
 Given your project's sources, the first command **init** creates both the ad-hoc `nodevops` scripts and Docker agents. 
-The project's sources and your environment are inspected, and a customized Docker agent is built accordingly.
+The project's sources and your environment are inspected, language and features are detected, and a customized Docker agent is built accordingly.
 
-The Docker agent is based on alpine and containing all the relevant tools and environment variables, small in size and portable to both developers' machines or CI servers.
-For example, if the detected features are Java/Maven, Github, and Kubernetes - the ad-hoc Docker agent is going to contain the relevant CLIs (maven, kubectl, hub and others) together with the environment variables needed to execute commands.
+The Docker agent is based on alpine, contains the relevant build tools and CLIs, captures the required environment variables, and is portable and executable by any machine, either developers' or CI servers.
 
-From this point, you can use the `nodevops` script to execute any CI/CD commands for this specific project, such as **build**, **push**, **deploy**. The **cicd** command creates github webhook, listens to pull requests and comments (gitops), and executes the **pipeline** command when required.
+From this point, you can use the `nodevops` script to execute CI/CD commands for this specific project, such as **build**, **push**, **deploy**. The **cicd** command creates a github webhook, listens to pull requests and comments, and executes **pipeline** or other commands when required (gitops).
 
 It is very easy to extend the project with for any build/deploy tool - by adding a Dockerfile snippet to install the relevant CLI tool (for the customized Docker agent), and few Shell script lines (for commands).
+
+#### Example
+For example, for a Java project sources with Maven pom.xml file, environment variables set for GITHUB_TOKEN, and a defined kubernetes context .kube - the ad-hoc Docker agent is going to contain Java and Maven to execute _build_, together with the environment needed to execute _cicd_ gitops commands with github, and kubernetes context for _deploy_.
 
 ----
 
