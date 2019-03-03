@@ -1,0 +1,15 @@
+
+# todo use .env
+ARG BUILD_TYPE
+ARG PUSH_TYPE
+ARG DEPLOY_TYPE
+
+ENV BUILD_TYPE=$BUILD_TYPE PUSH_TYPE=$PUSH_TYPE DEPLOY_TYPE=$DEPLOY_TYPE 
+
+ENV PATH=/nodevops:/nodevops/scripts:$PATH
+
+WORKDIR /workspace
+
+ADD scripts /nodevops/scripts
+
+ENTRYPOINT []

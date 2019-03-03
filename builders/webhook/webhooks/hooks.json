@@ -1,0 +1,48 @@
+[
+  {
+    "id": "webhook",
+    "execute-command": "/workspace/nodevops",
+    "command-working-directory": "/workspace",
+    "include-command-output-in-response": true,
+    "include-command-output-in-response-on-error": true,
+    "response-headers": [
+      {
+        "name": "Access-Control-Allow-Origin",
+        "value": "*"
+      }
+    ],
+    "pass-arguments-to-command": [
+      {
+        "source": "string",
+        "name": "cicd"
+      },
+      {
+        "source": "string",
+        "name": "hook"
+      },
+      {
+        "source": "header",
+        "name": "X-GitHub-Event"
+      },
+      {
+        "source": "entire-payload"
+      }
+    ],
+    "pass-environment-to-command": [
+      {
+        "source": "entire-payload",
+        "name": "PAYLOAD"
+      }
+    ],
+    "trigger-rule": {
+      "match": {
+        "type": "payload-hash-sha1",
+        "secret": "blablabla",
+        "parameter": {
+          "source": "header",
+          "name": "X-Hub-Signature"
+        }
+      }
+    }
+  }
+]
