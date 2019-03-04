@@ -81,7 +81,7 @@ UI is not in the scope of this project and is orthogonal, but there are several 
 
 As for security, one approach would be to inject tokens and secrets from the running host and user, rather than encapsulating it into the Docker agent.
 
-### `nodevops` script
+### nodevops script
 The `nodevops` Shell script contains two sections - CI/CD definitions as environment variables and running the Docker agent.
 
 The definitions are captured and prompted in the **init** command step, based on the optional `[features]` parameters and the host's environment variables and context, and can be further edited manually.
@@ -109,3 +109,24 @@ IMAGE=nodevops/getting-started-agent
 # run docker agent
 docker run ... $VOLUMES $ENV_VARS $IMAGE $@
 ```
+
+### Status
+The project is in POC status, and _might be_ WIP. Feel free to contact, fork or send pull requests.
+
+And although I hate licencing (and douchebags in general), for the time being -
+
+#### Copyright and license
+
+Copyright [2019] [Ron Mamo]
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+  [http://www.apache.org/licenses/LICENSE-2.0](http://www.apache.org/licenses/LICENSE-2.0)
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
